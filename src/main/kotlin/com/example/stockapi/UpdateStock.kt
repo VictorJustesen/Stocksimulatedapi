@@ -21,6 +21,7 @@ data class Stock(val ticker: String, val originalPrice: Double) {
         return historicalData.takeLast(count).map { it.price }
     }
 }
+data class StockGroup(val name: String, val tickers: List<Stock>)
 
 data class PricePoint(val timestamp: Long, val price: Double)
 
@@ -31,22 +32,45 @@ enum class Interval {
 @Service
 class UpdateStock {
 
-    private val stocks = ConcurrentHashMap<String, Stock>()
-    private val folderPath = "tickers" // Folder to store files
     private var lastMinute: LocalDateTime = LocalDateTime.now().truncatedTo(ChronoUnit.MINUTES)
     private var lastFifteenMinutes: LocalDateTime = LocalDateTime.now().truncatedTo(ChronoUnit.MINUTES)
     private var lastHour: LocalDateTime = LocalDateTime.now().truncatedTo(ChronoUnit.HOURS)
     private var lastDay: LocalDateTime = LocalDateTime.now().truncatedTo(ChronoUnit.DAYS)
 
-    init {
-        File(folderPath).mkdirs() // Create the folder if it doesn't exist
-        // Initialize with some stocks
-        stocks["AAPL"] = Stock("AAPL", 150.0)
-        // Load historical data from file for each stock
-        stocks.keys.forEach { loadHistoricalData(it) }
+        private val Stocks = ConcurrentHashMap<String, Stock>() // All individual stocks
+        private val stockGroups = ConcurrentHashMap<String, StockGroup>() // Groups of stocks
+        private val folderPath = "tickers" // Folder to store files
+
+    private val debugMode = true // Set to true to enable debug mode, false to disable
+
+    private fun debugPrint(message: String) {
+        if (debugMode) { println(message) } }
+
+        init {
+
+
+            stockGroups["C25"] = StockGroup("C25", listOf(Stock("NOVO", 750.0)))
+
+            stockGroups["S&P500"] = StockGroup("S&P500", listOf(Stock("AAPL", 150.0)))
+
+
+            // Add all stocks to the comprehensive list
+            stockGroups.values.forEach { group ->
+                group.tickers.forEach { stock ->
+                    Stocks[stock.ticker] = stock
+                    loadHistoricalData(stock.ticker)
+                }
+            }
+        }
+
+    fun getTickersByGroup(groupName: String): List<String> {
+        val group = stockGroups[groupName] ?: throw IllegalArgumentException("Stock group not found")
+        return group.tickers.map { it.ticker }
     }
 
+
     private fun loadHistoricalData(ticker: String) {
+        debugPrint("$ticker")
         val file = File("$folderPath/$ticker.txt")
         if (!file.exists()) {
             file.createNewFile()
@@ -54,13 +78,13 @@ class UpdateStock {
 
         file.forEachLine { line ->
             line.toDoubleOrNull()?.let { price ->
-                stocks[ticker]?.addHistoricalData(price)
+                Stocks[ticker]?.addHistoricalData(price)
             }
         }
     }
 
     fun getHistoricalData(ticker: String, interval: Interval, count: Int): List<Double> {
-        val stock = stocks[ticker] ?: throw IllegalArgumentException("Stock not found")
+        val stock = Stocks[ticker] ?: throw IllegalArgumentException("Stock not found")
         val file = File("$folderPath/$ticker.txt")
         if (!file.exists()) return emptyList()
 
@@ -71,29 +95,31 @@ class UpdateStock {
 
     @Scheduled(fixedRate = 1000)
     fun updateStockPrices() {
-        stocks.values.forEach { stock ->
+        Stocks.values.forEach { stock ->
+            //debugPrint("Processing stock: ${stock.ticker}")
+
             val change = (Random.nextDouble() - 0.5) * 0.1 // Change in price
             stock.currentPrice += change
             stock.addHistoricalData(stock.currentPrice)
 
-            // Check for aggregation triggers
             if (timeToAggregateMinute()) {
-                aggregateDataForInterval(stock, Interval.MINUTE)
+                aggregateDataForAllStocks(Interval.MINUTE)
             }
             if (timeToAggregateFifteenMinutes()) {
-                aggregateDataForInterval(stock, Interval.FIFTEEN_MINUTES)
+                aggregateDataForAllStocks(Interval.FIFTEEN_MINUTES)
             }
             if (timeToAggregateHour()) {
-                aggregateDataForInterval(stock, Interval.HOUR)
+                aggregateDataForAllStocks(Interval.HOUR)
             }
             if (timeToAggregateDay()) {
-                aggregateDataForInterval(stock, Interval.DAY)
+                aggregateDataForAllStocks(Interval.DAY)
             }
         }
     }
 
     private fun appendToFile(ticker: String, data: String) {
         File("$folderPath/$ticker.txt").appendText(data)
+        debugPrint("appending ticker: $ticker data:$data")
     }
 
     private fun timeToAggregateMinute(): Boolean {
@@ -119,8 +145,13 @@ class UpdateStock {
         val currentDay = LocalDateTime.now().truncatedTo(ChronoUnit.DAYS)
         return currentDay != lastDay.also { lastDay = currentDay }
     }
-
+    private fun aggregateDataForAllStocks(interval: Interval) {
+        Stocks.values.forEach { stock ->
+            aggregateDataForInterval(stock, interval)
+        }
+    }
     private fun aggregateDataForInterval(stock: Stock, interval: Interval) {
+        debugPrint("Aggregating data for ${stock.ticker} at interval $interval")
         val aggregatedData = stock.getAggregatedData(interval, calculateCountForInterval(interval))
         val averagePrice = if (aggregatedData.isNotEmpty()) aggregatedData.average() else 0.0
         appendToFile(stock.ticker, "${interval.name}:$averagePrice\n")

@@ -27,4 +27,10 @@ class StockController(val updateStock: UpdateStock) {
         val intervalEnum = Interval.valueOf(interval.toUpperCase()) // Convert to Interval enum
         return updateStock.getHistoricalData(ticker, intervalEnum, count)
     }
+
+    @GetMapping("/group/tickers/{groupName}")
+    fun getGroupTickers(@PathVariable groupName: String): List<String> {
+        return updateStock.getTickersByGroup(groupName)
+    }
+
 }
