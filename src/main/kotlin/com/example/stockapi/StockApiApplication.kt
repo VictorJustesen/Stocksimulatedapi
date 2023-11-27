@@ -21,12 +21,24 @@ class StockController(val updateStock: UpdateStock) {
     @GetMapping("/stock/{ticker}/{interval}/{count}")
     fun getHistoricalData(
         @PathVariable ticker: String,
-        @PathVariable interval: String, // Changed to String
+        @PathVariable interval: String,
         @PathVariable count: Int
-    ): List<Double> {
-        val intervalEnum = Interval.valueOf(interval.toUpperCase()) // Convert to Interval enum
-        return updateStock.getHistoricalData(ticker, intervalEnum, count)
+    ): List<List<Double>> {
+        val intervalEnum = Interval.valueOf(interval.toUpperCase())
+        val historicalData = updateStock.getHistoricalData(ticker, intervalEnum, count)
+
+        return historicalData.map { dataLine ->
+            // Ensure dataLine is a String
+            val line = dataLine.toString()
+
+            val average = line.substringAfter("Average=").substringBefore(",").toDoubleOrNull() ?: 0.0
+            val max = line.substringAfter("Max=").substringBefore(",").toDoubleOrNull() ?: 0.0
+            val min = line.substringAfter("Min=").substringBefore("\n").toDoubleOrNull() ?: 0.0
+
+            listOf(average, max, min)
+        }
     }
+
 
     @GetMapping("/group/tickers/{groupName}")
     fun getGroupTickers(@PathVariable groupName: String): List<String> {

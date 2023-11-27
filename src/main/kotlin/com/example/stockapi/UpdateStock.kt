@@ -5,6 +5,8 @@ import org.springframework.stereotype.Service
 import java.io.File
 import java.time.LocalDateTime
 import java.time.temporal.ChronoUnit
+import java.util.*
+import java.util.Collections.emptyList
 import java.util.concurrent.ConcurrentHashMap
 import kotlin.random.Random
 
@@ -41,7 +43,7 @@ class UpdateStock {
         private val stockGroups = ConcurrentHashMap<String, StockGroup>() // Groups of stocks
         private val folderPath = "tickers" // Folder to store files
 
-    private val debugMode = true // Set to true to enable debug mode, false to disable
+    private val debugMode = false // Set to true to enable debug mode, false to disable
 
     private fun debugPrint(message: String) {
         if (debugMode) { println(message) } }
@@ -70,14 +72,15 @@ class UpdateStock {
 
 
     private fun loadHistoricalData(ticker: String) {
-        debugPrint("$ticker")
         val file = File("$folderPath/$ticker.txt")
         if (!file.exists()) {
             file.createNewFile()
         }
 
         file.forEachLine { line ->
-            line.toDoubleOrNull()?.let { price ->
+            // Assuming the average is always present and is the first value
+            val averagePart = line.substringAfter("Average=").substringBefore(",")
+            averagePart.toDoubleOrNull()?.let { price ->
                 Stocks[ticker]?.addHistoricalData(price)
             }
         }
@@ -90,7 +93,12 @@ class UpdateStock {
 
         val data = file.readLines()
         val intervalData = data.filter { it.startsWith(interval.name) }.takeLast(count)
-        return intervalData.flatMap { it.removePrefix("${interval.name}:").split(",").mapNotNull { price -> price.toDoubleOrNull() } }
+
+        return intervalData.mapNotNull { line ->
+            // Extract the average value from the line
+            val averagePart = line.substringAfter("Average=").substringBefore(",")
+            averagePart.toDoubleOrNull()
+        }
     }
 
     @Scheduled(fixedRate = 1000)
@@ -151,10 +159,15 @@ class UpdateStock {
         }
     }
     private fun aggregateDataForInterval(stock: Stock, interval: Interval) {
-        debugPrint("Aggregating data for ${stock.ticker} at interval $interval")
         val aggregatedData = stock.getAggregatedData(interval, calculateCountForInterval(interval))
+
         val averagePrice = if (aggregatedData.isNotEmpty()) aggregatedData.average() else 0.0
-        appendToFile(stock.ticker, "${interval.name}:$averagePrice\n")
+        val maxPrice = aggregatedData.maxOrNull() ?: 0.0
+        val minPrice = aggregatedData.minOrNull() ?: 0.0
+
+        // Append the average, max, and min values to the file
+        val dataString = "${interval.name}: Average=$averagePrice, Max=$maxPrice, Min=$minPrice\n"
+        appendToFile(stock.ticker, dataString)
     }
 
     private fun calculateCountForInterval(interval: Interval): Int {
