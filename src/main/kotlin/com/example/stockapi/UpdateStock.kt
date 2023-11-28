@@ -47,10 +47,16 @@ class UpdateStock {
         init {
 
 
-            stockGroups["C25"] = StockGroup("C25", listOf(Stock("NOVO", 750.0)))
+            stockGroups["C25"] = StockGroup("C25", listOf(Stock("NOVO", 750.0),
+                Stock("MAERSK", 150.0),Stock("ORSTED", 15.0),
+                Stock("NETC", 30.0), Stock("DANSKE", 25.0)))
 
-            stockGroups["S&P500"] = StockGroup("S&P500", listOf(Stock("AAPL", 150.0)))
+            stockGroups["S&P500"] = StockGroup("S&P500", listOf(Stock("MSFT", 382.0)
+                ,Stock("AAPL", 189.0),Stock("NVDA", 477.0),Stock("AMZN", 150.0),
+                Stock("GOOGL", 150.0), Stock("META", 340.0),
+                Stock("BRK.B", 350.0)))
 
+            stockGroups["WORLD"] = StockGroup("WORLD", listOf(Stock("OIL", 50.0)))
 
             // Add all stocks to the comprehensive list
             stockGroups.values.forEach { group ->
@@ -71,13 +77,20 @@ class UpdateStock {
         val file = File("$folderPath/$ticker.txt")
         if (!file.exists()) {
             file.createNewFile()
-        }
-
-        file.forEachLine { line ->
-            // Assuming the average is always present and is the first value
-            val averagePart = line.substringAfter("Average=").substringBefore(",")
-            averagePart.toDoubleOrNull()?.let { price ->
-                Stocks[ticker]?.addHistoricalData(price)
+        } else {
+            var lastPrice: Double? = null
+            file.forEachLine { line ->
+                // Assuming the average is always present and is the first value
+                val averagePart = line.substringAfter("Average=").substringBefore(",")
+                val price = averagePart.toDoubleOrNull()
+                price?.let {
+                    Stocks[ticker]?.addHistoricalData(it)
+                    lastPrice = it
+                }
+            }
+            // Set the current price to the last historical price
+            if (lastPrice != null) {
+                Stocks[ticker]?.currentPrice = lastPrice!!
             }
         }
     }
@@ -131,6 +144,7 @@ class UpdateStock {
             }
             if (simulatedTime % (24 * 60 * 60) == 0) { // Day
                 aggregateDataForInterval(Interval.DAY,Interval.HOUR,24, stock)
+                appendToFile("","\n")
                 cleanUpDataFiles()
             }
 
@@ -138,7 +152,7 @@ class UpdateStock {
     }
 
     private fun appendToFile(ticker: String, data: String) {
-        File("$folderPath/$ticker.txt").appendText(data)
+        File("$folderPath/$ticker.txt").appendText(data )
         debugPrint("appending ticker: $ticker data:$data")
     }
 
