@@ -101,9 +101,10 @@ class UpdateStock {
 
     @Scheduled(fixedRate = 10)
     fun updateStockPrices() {
+        simulatedTime += 1
         Stocks.values.forEach { stock ->
             //debugPrint("Processing stock: ${stock.ticker}")
-            simulatedTime += 1
+
             val change = (Random.nextDouble() - 0.5) * 0.1 // Change in price
             stock.currentPrice += change
             stock.addHistoricalData(stock.currentPrice)
@@ -122,13 +123,13 @@ class UpdateStock {
             }
 
             if (simulatedTime % (15 * 60) == 0) { // Fifteen minutes
-                aggregateDataForInterval(Interval.FIFTEEN_MINUTES,Interval.MINUTE,15)
+                aggregateDataForInterval(Interval.FIFTEEN_MINUTES,Interval.MINUTE,15, stock)
             }
             if (simulatedTime % (60 * 60) == 0) { // Hour
-                aggregateDataForInterval(Interval.HOUR,Interval.FIFTEEN_MINUTES,4)
+                aggregateDataForInterval(Interval.HOUR,Interval.FIFTEEN_MINUTES,4, stock)
             }
             if (simulatedTime % (24 * 60 * 60) == 0) { // Day
-                aggregateDataForInterval(Interval.DAY,Interval.HOUR,24)
+                aggregateDataForInterval(Interval.DAY,Interval.HOUR,24, stock)
             }
         }
     }
@@ -140,8 +141,7 @@ class UpdateStock {
 
 
 
-    private fun aggregateDataForInterval(interval: Interval, earlyInterval: Interval, timesEarlyInterval: Int) {
-        Stocks.values.forEach { stock ->
+    private fun aggregateDataForInterval(interval: Interval, earlyInterval: Interval, timesEarlyInterval: Int, stock: Stock) {
             val historicalData = getHistoricalData(stock.ticker, earlyInterval, timesEarlyInterval)
 
             val averagePrice = historicalData.map { it.first }.average()
@@ -150,7 +150,6 @@ class UpdateStock {
 
             val dataString = "${interval.name}: Average=$averagePrice, Max=$maxOfMax, Min=$minOfMin\n"
             appendToFile(stock.ticker, dataString)
-        }
     }
 
     private fun calculateCountForInterval(interval: Interval): Int {
