@@ -101,6 +101,7 @@ class UpdateStock {
 
     @Scheduled(fixedRate = 10)
     fun updateStockPrices() {
+
         simulatedTime += 1
         Stocks.values.forEach { stock ->
             //debugPrint("Processing stock: ${stock.ticker}")
@@ -130,7 +131,9 @@ class UpdateStock {
             }
             if (simulatedTime % (24 * 60 * 60) == 0) { // Day
                 aggregateDataForInterval(Interval.DAY,Interval.HOUR,24, stock)
+                cleanUpDataFiles()
             }
+
         }
     }
 
@@ -162,7 +165,7 @@ class UpdateStock {
     }
 
 
-@Scheduled(fixedRate = 60000) // Run every minute or choose an appropriate interval
+// Run every minute or choose an appropriate interval
 fun cleanUpDataFiles() {
     Stocks.keys.forEach { ticker ->
         cleanUpFileForTicker(ticker)

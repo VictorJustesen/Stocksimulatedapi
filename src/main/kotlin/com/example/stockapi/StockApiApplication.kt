@@ -1,5 +1,6 @@
 package com.example.stockapi
 
+import org.springframework.aot.hint.TypeReference.listOf
 import org.springframework.boot.autoconfigure.SpringBootApplication
 import org.springframework.boot.runApplication
 import org.springframework.scheduling.annotation.EnableScheduling
@@ -18,26 +19,22 @@ fun main(args: Array<String>) {
 @RestController
 class StockController(val updateStock: UpdateStock) {
 
-    @GetMapping("/stock/{ticker}/{interval}/{count}")
-    fun getHistoricalData(
-        @PathVariable ticker: String,
-        @PathVariable interval: String,
-        @PathVariable count: Int
-    ): List<List<Double>> {
-        val intervalEnum = Interval.valueOf(interval.toUpperCase())
-        val historicalData = updateStock.getHistoricalData(ticker, intervalEnum, count)
+    @RestController
+    class StockController(val updateStock: UpdateStock) {
 
-        return historicalData.map { dataLine ->
-            // Ensure dataLine is a String
-            val line = dataLine.toString()
+        @RestController
+        class StockController(val updateStock: UpdateStock) {
 
-            val average = line.substringAfter("Average=").substringBefore(",").toDoubleOrNull() ?: 0.0
-            val max = line.substringAfter("Max=").substringBefore(",").toDoubleOrNull() ?: 0.0
-            val min = line.substringAfter("Min=").substringBefore("\n").toDoubleOrNull() ?: 0.0
-
-            listOf(average, max, min)
+            @GetMapping("/stock/{ticker}/{interval}/{count}")
+            fun getHistoricalData(
+                @PathVariable ticker: String,
+                @PathVariable interval: String,
+                @PathVariable count: Int
+            ): List<Triple<Double, Double, Double>> {
+                val intervalEnum = Interval.valueOf(interval.toUpperCase())
+                return updateStock.getHistoricalData(ticker, intervalEnum, count)
+            }
         }
-    }
 
 
     @GetMapping("/group/tickers/{groupName}")
@@ -45,4 +42,4 @@ class StockController(val updateStock: UpdateStock) {
         return updateStock.getTickersByGroup(groupName)
     }
 
-}
+}}
