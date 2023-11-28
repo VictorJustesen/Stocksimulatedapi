@@ -19,7 +19,7 @@ data class Stock(val ticker: String, val originalPrice: Double) {
     }
 
     fun getAggregatedData(interval: Interval, count: Int): List<Double> {
-        // Simplified for demonstration
+        // Return the last 'count' price points relevant to the interval
         return historicalData.takeLast(count).map { it.price }
     }
 }
@@ -33,11 +33,7 @@ enum class Interval {
 
 @Service
 class UpdateStock {
-
-    private var lastMinute: LocalDateTime = LocalDateTime.now().truncatedTo(ChronoUnit.MINUTES)
-    private var lastFifteenMinutes: LocalDateTime = LocalDateTime.now().truncatedTo(ChronoUnit.MINUTES)
-    private var lastHour: LocalDateTime = LocalDateTime.now().truncatedTo(ChronoUnit.HOURS)
-    private var lastDay: LocalDateTime = LocalDateTime.now().truncatedTo(ChronoUnit.DAYS)
+    private var simulatedTime: Int = 0
 
         private val Stocks = ConcurrentHashMap<String, Stock>() // All individual stocks
         private val stockGroups = ConcurrentHashMap<String, StockGroup>() // Groups of stocks
@@ -86,7 +82,7 @@ class UpdateStock {
         }
     }
 
-    fun getHistoricalData(ticker: String, interval: Interval, count: Int): List<Double> {
+    fun getHistoricalData(ticker: String, interval: Interval, count: Int): List<Triple<Double, Double, Double>> {
         val stock = Stocks[ticker] ?: throw IllegalArgumentException("Stock not found")
         val file = File("$folderPath/$ticker.txt")
         if (!file.exists()) return emptyList()
@@ -95,32 +91,44 @@ class UpdateStock {
         val intervalData = data.filter { it.startsWith(interval.name) }.takeLast(count)
 
         return intervalData.mapNotNull { line ->
-            // Extract the average value from the line
-            val averagePart = line.substringAfter("Average=").substringBefore(",")
-            averagePart.toDoubleOrNull()
+            val average = line.substringAfter("Average=").substringBefore(",").toDoubleOrNull()
+            val max = line.substringAfter("Max=").substringBefore(",").toDoubleOrNull()
+            val min = line.substringAfter("Min=").toDoubleOrNull()
+            if (average != null && max != null && min != null) Triple(average, max, min) else null
         }
     }
 
-    @Scheduled(fixedRate = 1000)
+
+    @Scheduled(fixedRate = 10)
     fun updateStockPrices() {
         Stocks.values.forEach { stock ->
             //debugPrint("Processing stock: ${stock.ticker}")
-
+            simulatedTime += 1
             val change = (Random.nextDouble() - 0.5) * 0.1 // Change in price
             stock.currentPrice += change
             stock.addHistoricalData(stock.currentPrice)
 
-            if (timeToAggregateMinute()) {
-                aggregateDataForAllStocks(Interval.MINUTE)
+            if (simulatedTime % 60 == 0) { // Minute
+                val relevantData = stock.getAggregatedData(Interval.MINUTE, calculateCountForInterval(Interval.MINUTE))
+
+                // Calculate the average, max, and min for the relevant data
+                val averagePrice = if (relevantData.isNotEmpty()) relevantData.average() else 0.0
+                val maxPrice = relevantData.maxOrNull() ?: 0.0
+                val minPrice = relevantData.minOrNull() ?: 0.0
+
+                // Append the average, max, and min values to the file
+                val dataString = "${Interval.MINUTE.name}: Average=$averagePrice, Max=$maxPrice, Min=$minPrice\n"
+                appendToFile(stock.ticker,dataString)
             }
-            if (timeToAggregateFifteenMinutes()) {
-                aggregateDataForAllStocks(Interval.FIFTEEN_MINUTES)
+
+            if (simulatedTime % (15 * 60) == 0) { // Fifteen minutes
+                aggregateDataForInterval(Interval.FIFTEEN_MINUTES,Interval.MINUTE,15)
             }
-            if (timeToAggregateHour()) {
-                aggregateDataForAllStocks(Interval.HOUR)
+            if (simulatedTime % (60 * 60) == 0) { // Hour
+                aggregateDataForInterval(Interval.HOUR,Interval.FIFTEEN_MINUTES,4)
             }
-            if (timeToAggregateDay()) {
-                aggregateDataForAllStocks(Interval.DAY)
+            if (simulatedTime % (24 * 60 * 60) == 0) { // Day
+                aggregateDataForInterval(Interval.DAY,Interval.HOUR,24)
             }
         }
     }
@@ -130,44 +138,19 @@ class UpdateStock {
         debugPrint("appending ticker: $ticker data:$data")
     }
 
-    private fun timeToAggregateMinute(): Boolean {
-        val currentMinute = LocalDateTime.now().truncatedTo(ChronoUnit.MINUTES)
-        return currentMinute != lastMinute.also { lastMinute = currentMinute }
-    }
 
-    private fun timeToAggregateFifteenMinutes(): Boolean {
-        val currentFifteenMinutes = LocalDateTime.now().truncatedTo(ChronoUnit.MINUTES)
-        if (currentFifteenMinutes.minute % 15 == 0 && currentFifteenMinutes != lastFifteenMinutes) {
-            lastFifteenMinutes = currentFifteenMinutes
-            return true
-        }
-        return false
-    }
 
-    private fun timeToAggregateHour(): Boolean {
-        val currentHour = LocalDateTime.now().truncatedTo(ChronoUnit.HOURS)
-        return currentHour != lastHour.also { lastHour = currentHour }
-    }
-
-    private fun timeToAggregateDay(): Boolean {
-        val currentDay = LocalDateTime.now().truncatedTo(ChronoUnit.DAYS)
-        return currentDay != lastDay.also { lastDay = currentDay }
-    }
-    private fun aggregateDataForAllStocks(interval: Interval) {
+    private fun aggregateDataForInterval(interval: Interval, earlyInterval: Interval, timesEarlyInterval: Int) {
         Stocks.values.forEach { stock ->
-            aggregateDataForInterval(stock, interval)
+            val historicalData = getHistoricalData(stock.ticker, earlyInterval, timesEarlyInterval)
+
+            val averagePrice = historicalData.map { it.first }.average()
+            val maxOfMax = historicalData.maxOfOrNull { it.second } ?: 0.0
+            val minOfMin = historicalData.minOfOrNull { it.third } ?: 0.0
+
+            val dataString = "${interval.name}: Average=$averagePrice, Max=$maxOfMax, Min=$minOfMin\n"
+            appendToFile(stock.ticker, dataString)
         }
-    }
-    private fun aggregateDataForInterval(stock: Stock, interval: Interval) {
-        val aggregatedData = stock.getAggregatedData(interval, calculateCountForInterval(interval))
-
-        val averagePrice = if (aggregatedData.isNotEmpty()) aggregatedData.average() else 0.0
-        val maxPrice = aggregatedData.maxOrNull() ?: 0.0
-        val minPrice = aggregatedData.minOrNull() ?: 0.0
-
-        // Append the average, max, and min values to the file
-        val dataString = "${interval.name}: Average=$averagePrice, Max=$maxPrice, Min=$minPrice\n"
-        appendToFile(stock.ticker, dataString)
     }
 
     private fun calculateCountForInterval(interval: Interval): Int {
