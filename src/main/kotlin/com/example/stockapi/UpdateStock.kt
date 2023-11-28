@@ -160,4 +160,23 @@ class UpdateStock {
             Interval.DAY -> 24 // 24 hours
         }
     }
+
+
+@Scheduled(fixedRate = 60000) // Run every minute or choose an appropriate interval
+fun cleanUpDataFiles() {
+    Stocks.keys.forEach { ticker ->
+        cleanUpFileForTicker(ticker)
+    }
+}
+
+private fun cleanUpFileForTicker(ticker: String) {
+    val file = File("$folderPath/$ticker.txt")
+    if (!file.exists()) return
+
+    val allLines = file.readLines()
+    val cleanedLines = allLines.groupBy { it.substringBefore(':') } // Group by interval
+        .flatMap { (_, lines) -> lines.takeLast(300) } // Keep only last 300 entries per interval
+
+    file.writeText(cleanedLines.joinToString("\n")) // Rewrite the file with cleaned data
+}
 }
