@@ -19,11 +19,6 @@ fun main(args: Array<String>) {
 @RestController
 class StockController(val updateStock: UpdateStock) {
 
-    @RestController
-    class StockController(val updateStock: UpdateStock) {
-
-        @RestController
-        class StockController(val updateStock: UpdateStock) {
 
             @GetMapping("/stock/{ticker}/{interval}/{count}")
             fun getHistoricalData(
@@ -34,7 +29,7 @@ class StockController(val updateStock: UpdateStock) {
                 val intervalEnum = Interval.valueOf(interval.toUpperCase())
                 return updateStock.getHistoricalData(ticker, intervalEnum, count)
             }
-        }
+
 
 
     @GetMapping("/group/tickers/{groupName}")
@@ -42,4 +37,14 @@ class StockController(val updateStock: UpdateStock) {
         return updateStock.getTickersByGroup(groupName)
     }
 
-}}
+    @GetMapping("/stock/nationalities/{tickers}")
+    fun getStockNationalities(@PathVariable tickers: String): Map<String, String> {
+        // Remove the brackets and split the string by comma
+        val tickerList = tickers.removeSurrounding("[", "]").split(",")
+        return updateStock.getNationalities(tickerList)
+    }
+    @GetMapping("/search/stocks/{query}")
+    fun searchStocks(@PathVariable query: String): List<String> {
+        return updateStock.searchStocksBySubstring(query)
+    }
+}

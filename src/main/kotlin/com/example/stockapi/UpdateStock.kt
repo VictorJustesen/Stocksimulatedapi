@@ -38,6 +38,7 @@ class UpdateStock {
         private val Stocks = ConcurrentHashMap<String, Stock>() // All individual stocks
         private val stockGroups = ConcurrentHashMap<String, StockGroup>() // Groups of stocks
         private val folderPath = "tickers" // Folder to store files
+        private val stockNationalities: ConcurrentHashMap<String, String> = ConcurrentHashMap()
 
     private val debugMode = false // Set to true to enable debug mode, false to disable
 
@@ -72,7 +73,23 @@ class UpdateStock {
         return group.tickers.map { it.ticker }
     }
 
+    fun getNationalities(tickers: List<String>): Map<String, String> {
+        val nationalities = mutableMapOf<String, String>()
 
+        stockGroups.forEach { (groupName, group) ->
+            group.tickers.forEach { stock ->
+                if (tickers.contains(stock.ticker)) {
+                    nationalities[stock.ticker] = groupName
+                }
+            }
+        }
+
+        return nationalities
+    }
+
+    fun searchStocksBySubstring(query: String): List<String> {
+        return Stocks.keys.filter { it.contains(query, ignoreCase = true) }
+    }
     private fun loadHistoricalData(ticker: String) {
         val file = File("$folderPath/$ticker.txt")
         if (!file.exists()) {
@@ -141,18 +158,24 @@ class UpdateStock {
             }
             if (simulatedTime % (60 * 60) == 0) { // Hour
                 aggregateDataForInterval(Interval.HOUR,Interval.FIFTEEN_MINUTES,4, stock)
+
+
+
+
             }
             if (simulatedTime % (24 * 60 * 60) == 0) { // Day
                 aggregateDataForInterval(Interval.DAY,Interval.HOUR,24, stock)
-                appendToFile("","\n")
-                cleanUpDataFiles()
+
+                Stocks.keys.forEach { ticker ->
+                    cleanUpFileForTicker(ticker)
+                }
             }
 
         }
     }
 
     private fun appendToFile(ticker: String, data: String) {
-        File("$folderPath/$ticker.txt").appendText(data )
+        File("$folderPath/$ticker.txt").appendText(data)
         debugPrint("appending ticker: $ticker data:$data")
     }
 
@@ -178,14 +201,6 @@ class UpdateStock {
         }
     }
 
-
-// Run every minute or choose an appropriate interval
-fun cleanUpDataFiles() {
-    Stocks.keys.forEach { ticker ->
-        cleanUpFileForTicker(ticker)
-    }
-}
-
 private fun cleanUpFileForTicker(ticker: String) {
     val file = File("$folderPath/$ticker.txt")
     if (!file.exists()) return
@@ -194,6 +209,9 @@ private fun cleanUpFileForTicker(ticker: String) {
     val cleanedLines = allLines.groupBy { it.substringBefore(':') } // Group by interval
         .flatMap { (_, lines) -> lines.takeLast(300) } // Keep only last 300 entries per interval
 
-    file.writeText(cleanedLines.joinToString("\n")) // Rewrite the file with cleaned data
+    file.writeText(cleanedLines.joinToString("\n")
+
+    )
+    appendToFile("$ticker","\n")
 }
 }
